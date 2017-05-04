@@ -1,0 +1,11 @@
+{
+	"connection": {
+		"url": "nats://localhost:4222",
+		"user": "",
+	    "password": "",
+	    "json": true
+	},
+	"requestDefaults": {
+		"timeout": 5000
+	}
+}
