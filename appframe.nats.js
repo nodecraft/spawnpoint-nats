@@ -1,4 +1,8 @@
 'use strict';
+
+var fs = require('fs'),
+	path = require('path');
+
 var _ = require('lodash'),
 	nats = require('nats'),
 	EventEmitter2 = require('eventemitter2').EventEmitter2;
@@ -9,6 +13,32 @@ module.exports = require('appframe')().registerPlugin({
 	namespace: "nats",
 	callback: true,
 	exports: function(app, initCallback){
+
+		// read TLS files
+		if(app.config.nats && app.config.nats.connection.tls){
+			if(app.config.nats.connection.tls.ca_file){
+				app.config.nats.connection.tls.ca = [fs.readFileSync(path.join(app.cwd, app.config.nats.connection.tls.ca_file), 'utf8')];
+				delete app.config.nats.connection.tls.ca_file;
+			}
+			if(app.config.nats.connection.tls.ca_files){
+				var certs = [];
+				_.each(app.config.nats.connection.tls.ca_files, function(caCert){
+					certs.push(fs.readFileSync(path.join(app.cwd, caCert), 'utf8'));
+				});
+				app.config.nats.connection.tls.ca = certs;
+				delete app.config.nats.connection.tls.ca_files;
+			}
+			if(app.config.nats.connection.tls.key_file){
+				app.config.nats.connection.tls.key = fs.readFileSync(path.join(app.cwd, app.config.nats.connection.tls.key_file), 'utf8');
+				delete app.config.nats.connection.tls.key_file;
+			}
+			if(app.config.nats.connection.tls.cert_file){
+				app.config.nats.connection.tls.cert_file = fs.readFileSync(path.join(app.cwd, app.config.nats.connection.tls.cert_file), 'utf8');
+				delete app.config.nats.connection.tls.cert_file;
+			}
+		}
+
+		console.dir(app.config.nats, {depth: 9000});
 		var helpers = {
 			createTimeout: function(request){
 				return setTimeout(function(){
@@ -130,10 +160,10 @@ module.exports = require('appframe')().registerPlugin({
 			return initCallback();
 		});
 		app.nats.connection.on('error', function(err){
-			app.error('NATS error!').debug(err);
 			if(!app.nats.live){
 				return initCallback(err);
 			}
+			app.error('NATS error!').debug(err);
 		});
 		app.nats.connection.on('reconnect', function(){
 			app.emit('nats.reconnected');
