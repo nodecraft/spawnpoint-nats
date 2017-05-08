@@ -38,7 +38,6 @@ module.exports = require('appframe')().registerPlugin({
 			}
 		}
 
-		console.dir(app.config.nats, {depth: 9000});
 		var helpers = {
 			createTimeout: function(request){
 				return setTimeout(function(){
@@ -139,12 +138,15 @@ module.exports = require('appframe')().registerPlugin({
 					subject = app.config.nats.subscribe_prefix + subject;
 				}
 				return app.nats.connection.subscribe(subject, options, function(response, replyTo, sentSubject){
+					if(sentSubject && app.config.nats.subscribe_prefix && !options.noPrefix){
+						sentSubject = sentSubject.slice(app.config.nats.subscribe_prefix.length || 0);
+					}
+					if(!replyTo){
+						return callback(response, null, sentSubject);
+					}
 					var handler = helpers.handler(replyTo);
 					if(!options.noAck){
 						handler.ack();
-					}
-					if(app.config.nats.subscribe_prefix && !options.noPrefix){
-						sentSubject = sentSubject.slice(app.config.nats.subscribe_prefix.length || 0);
 					}
 					return callback(response, handler, sentSubject);
 				});
