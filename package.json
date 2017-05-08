@@ -1,6 +1,6 @@
 {
   "name": "appframe-nats",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "NATS Plugin for Appleframe on NPM",
   "main": "appframe.nats.js",
   "scripts": {
