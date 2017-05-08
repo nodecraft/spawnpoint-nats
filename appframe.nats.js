@@ -105,6 +105,9 @@ module.exports = require('appframe')().registerPlugin({
 					options = {};
 				}
 				callback = callback || function(){};
+				if(app.config.nats.subscribe_prefix && !options.noPrefix){
+					subject = app.config.nats.subscribe_prefix + subject;
+				}
 				return app.nats.connection.subscribe(subject, options, function(response, replyTo){
 					var handler = helpers.handler(replyTo);
 					if(!options.noAck){

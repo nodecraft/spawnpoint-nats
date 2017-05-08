@@ -46,6 +46,7 @@ Sends a message to a subscriber with the expectation of at least one reply. Main
    - `queue` *string* - Name of queue to join
    - `max` *number* - Maximum number of messages to receive before automatically unsubscribing.
    - `noAck` *boolean* - Prevents automatic `ack` message when set to true. Defaults to false.
+   - `noPrefix` *string* - Prefixes subscription subjects with string. Defaults to blank string
  - `callback *function* - callback fired when messages are received. Callback includes two arguments
    - `response` *object|array|string|buffer* - Message body
    - `handler` *eventEmitter* - Event emitter with helper methods to handle updates, acks, and replies.

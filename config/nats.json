@@ -5,7 +5,8 @@
 	    "password": "",
 	    "json": true
 	},
-	"requestDefaults": {
+	"request_defaults": {
 		"timeout": 5000
-	}
+	},
+	"subscribe_prefix": ""
 }
