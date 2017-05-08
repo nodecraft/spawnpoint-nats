@@ -57,6 +57,7 @@ Sends a message to a subscriber with the expectation of at least one reply. Main
         - `ack()`: Tells the request to reset timeout, has no body or data to send
         - `update(data *string*)`: Sends a message with data update the request. Also resets the timeout.
         - `response(err *error|null*, results *object|array|string|buffer*)`: Sends an error or response to the request
+   - `subject` *string* - Copy of the message subject. Useful for wildcard subscriptions. Does not include prefix where applicable.
 
 ###### Example:
  ```javascript

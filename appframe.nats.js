@@ -138,12 +138,15 @@ module.exports = require('appframe')().registerPlugin({
 				if(app.config.nats.subscribe_prefix && !options.noPrefix){
 					subject = app.config.nats.subscribe_prefix + subject;
 				}
-				return app.nats.connection.subscribe(subject, options, function(response, replyTo){
+				return app.nats.connection.subscribe(subject, options, function(response, replyTo, sentSubject){
 					var handler = helpers.handler(replyTo);
 					if(!options.noAck){
 						handler.ack();
 					}
-					return callback(response, handler);
+					if(app.config.nats.subscribe_prefix && !options.noPrefix){
+						sentSubject = sentSubject.slice(app.config.nats.subscribe_prefix.length || 0);
+					}
+					return callback(response, handler, sentSubject);
 				});
 			}
 		};
