@@ -87,7 +87,7 @@ module.exports = require('appframe')().registerPlugin({
 				updateCallback = updateCallback || function(){};
 
 				var request = {
-					options: _.defaults(options, app.config.nats.requestDefaults),
+					options: _.defaults(options, app.config.nats.request_defaults),
 					events: new EventEmitter2(),
 					timeout: null
 				};
