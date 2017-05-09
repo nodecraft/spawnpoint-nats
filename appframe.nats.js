@@ -79,7 +79,7 @@ module.exports = require('appframe')().registerPlugin({
 		};
 		app.nats = {
 			request: function(subject, msg, options, callback, updateCallback){
-				if(options && callback && !updateCallback && (typeof(options) === typeof(callback) === 'function')){
+				if(options && callback && !updateCallback && typeof(options) === 'function' && typeof(callback) === 'function'){
 					updateCallback = callback;
 					callback = options;
 					options = {};
