@@ -1,7 +1,7 @@
 {
   "name": "appframe-nats",
-  "version": "1.3.1",
-  "description": "NATS Plugin for Appleframe on NPM",
+  "version": "1.3.2",
+  "description": "NATS Plugin for Appframe on NPM",
   "main": "appframe.nats.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -26,14 +26,14 @@
   },
   "homepage": "https://github.com/nodecraft/appframe-nats.js#readme",
   "dependencies": {
-    "appframe": "^0.5.0",
+    "appframe": "*",
     "eventemitter2": "*",
     "lodash": "*",
-    "nats": "^0.7.16"
+    "nats": "0.7.18"
   },
   "devDependencies": {
     "eslint": "3.19.0",
-    "eslint-config-nodecraft": "1.0.1",
+    "eslint-config-nodecraft": "1.0.3",
     "eslint-plugin-json": "1.2.0",
     "eslint-plugin-node": "4.2.2"
   }
