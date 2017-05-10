@@ -40,10 +40,15 @@ module.exports = require('appframe')().registerPlugin({
 
 		var helpers = {
 			createTimeout: function(request){
+				var timeout = request.options.timeout;
+				if(request.ack){
+					timeout = request.ack;
+					delete request.ack;
+				}
 				return setTimeout(function(){
 					request.events.emit('timeout');
 					request.events.emit('response', app.failCode('nats.timeout'));
-				}, request.options.timeout);
+				}, timeout);
 			},
 			handler: function(replyTo){
 				var handler = new EventEmitter2();
@@ -55,8 +60,15 @@ module.exports = require('appframe')().registerPlugin({
 						error: err || null
 					});
 				});
-				handler.on('ack', function(){
-					return app.nats.connection.publish(replyTo, {type: 'ack'});
+				handler.on('ack', function(timeout){
+					timeout = timeout || null;
+					if(isNaN(timeout) || timeout < 1){
+						timeout = null;
+					}
+					return app.nats.connection.publish(replyTo, {
+						type: 'ack',
+						timeout: timeout
+					});
 				});
 				handler.on('update', function(results){
 					return app.nats.connection.publish(replyTo, {
@@ -65,8 +77,8 @@ module.exports = require('appframe')().registerPlugin({
 					});
 				});
 
-				handler.ack = function(){
-					return handler.emit('ack');
+				handler.ack = function(timeout){
+					return handler.emit('ack', timeout);
 				};
 				handler.update = function(update){
 					return handler.emit('update', update);
@@ -102,35 +114,66 @@ module.exports = require('appframe')().registerPlugin({
 					return callback(err, response);
 				});
 				request.events.on('update', updateCallback);
-				request.sid = app.nats.connection.request(subject, msg, request.options.reply, function(response){
+				var handler = function(response){
 					switch(response.type){
 						case "ack":
+							if(request.timeout){
+								clearTimeout(request.timeout);
+								if(response.timeout){
+									request.ack = response.timeout;
+								}
+								request.timeout = helpers.createTimeout(request);
+							}
+							request.events.emit("ack", response.results || {});
+							break;
 						case "update":
 							if(request.timeout){
 								clearTimeout(request.timeout);
 								request.timeout = helpers.createTimeout(request);
 							}
-							request.events.emit(response.type, response.results || {});
+							request.events.emit("update", response.results || {});
 							break;
 						case "response":
 							if(request.timeout){
 								clearTimeout(request.timeout);
 								request.timeout = helpers.createTimeout(request);
 							}
+							if(!response.error && response.results instanceof Error){
+								response.error = response.results;
+								response.results = null;
+							}
 							request.events.emit("response", response.error || null, response.results || null);
 							break;
 						default:
 							app.warn('Invalid response received for request').debug(response);
 					}
-				});
-				if(request.options.timeout){
-					request.timeout = helpers.createTimeout(request);
+				};
+				var error = null;
+				try{
+					request.sid = app.nats.connection.request(subject, msg, request.options.reply, handler);
+					if(request.options.timeout){
+						request.timeout = helpers.createTimeout(request);
+					}
+				}catch(err){
+					error = err;
 				}
-
+				if(error){
+					process.nextTick(function(){
+						request.events.emit("response", app.errorCode("nats.publish_message_error", response));
+					});
+				}
 				return request;
 			},
 			publish: function(subject, msg, callback){
-				return app.nats.connection.publish(subject, msg, callback || function(){});
+				var error = null;
+				try{
+					return app.nats.connection.publish(subject, msg, callback || function(){});
+				}catch(err){
+					error = err;
+				}
+				if(error){
+					return callback(error);
+				}
 			},
 			subscribe: function(subject, options, callback){
 				if(options && !callback){
@@ -145,10 +188,18 @@ module.exports = require('appframe')().registerPlugin({
 					if(sentSubject && app.config.nats.subscribe_prefix && !options.noPrefix){
 						sentSubject = sentSubject.slice(app.config.nats.subscribe_prefix.length || 0);
 					}
+					var errored = response instanceof Error;
+					if(errored){
+						app.emit('nats.subscribe_message_error', response);
+					}
 					if(!replyTo){
+						if(errored){ return; }
 						return callback(response, null, sentSubject);
 					}
 					var handler = helpers.handler(replyTo);
+					if(errored){
+						return handler.response(app.errorCode("nats.subscribe_message_error", response));
+					}
 					if(!options.noAck){
 						handler.ack();
 					}

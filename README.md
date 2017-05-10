@@ -50,7 +50,7 @@ Sends a message to a subscriber with the expectation of at least one reply. Main
    - `response` *object|array|string|buffer* - Message body
    - `handler` *eventEmitter* - Event emitter with helper methods to handle updates, acks, and replies.
      - Emittable EVENTS - These events need to be emitted to send messages
-       - `ack` - *(no arguments)*: Tells the request to reset timeout, has no body or data to send
+       - `ack` - timeout *int*: Resets the timeout for the request. If not timeout is specified it will reset the timer that was used by the requester. `timeout` is in ms.
        - `update` - data *string*: Sends a message with data update the request. Also resets the timeout.
        - `response` - err *error|null*, results *object|array|string|buffer*: Sends an error or response to the request
      - Helper Methods - These methods are helper methods to make emitting the events above easier
