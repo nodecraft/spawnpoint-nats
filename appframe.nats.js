@@ -213,7 +213,7 @@ module.exports = require('appframe')().registerPlugin({
 		app.nats.live = false;
 		app.nats.connection = nats.connect(app.config.nats.connection);
 		app.nats.connection.once('connect', function(){
-			app.log('Connected to NATS');
+			app.log('[NATS] Connected to server');
 			app.nats.live = true;
 			app.emit('app.register', 'nats');
 			app.emit('nats.connected');
@@ -231,7 +231,11 @@ module.exports = require('appframe')().registerPlugin({
 		});
 		app.nats.connection.on('reconnecting', function(){
 			app.emit('nats.reconnecting');
-			app.log('[NATS] Lost connection from server. Reconnecting...');
+			app.warn('[NATS] Lost connection from server. Reconnecting...');
+		});
+		app.nats.connection.on('close', function(){
+			app.emit('nats.close');
+			app.warn('[NATS] Closed connection to server.');
 		});
 
 		// handle shutdown
