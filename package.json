@@ -1,6 +1,6 @@
 {
   "name": "appframe-nats",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "NATS Plugin for Appframe on NPM",
   "main": "appframe.nats.js",
   "scripts": {
@@ -29,7 +29,7 @@
     "appframe": "*",
     "eventemitter2": "*",
     "lodash": "*",
-    "nats": "0.7.18"
+    "nats": "git+https://github.com/nats-io/node-nats.git"
   },
   "devDependencies": {
     "eslint": "3.19.0",
