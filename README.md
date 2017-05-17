@@ -11,14 +11,14 @@ Sends a message to a subscriber. Expects no response. Callback issued when messa
  - `callback` *function* - Optional callback fired when sent
 
 ##### `app.nats.request(subject, message, options, callback, updateCallback)`
-Sends a message to a subscriber with the expectation of at least one reply. Main callback only listens for the final reply. Can get updates to provide realtime stats/progress and/or acknowledgments to reset timeouts. Returns event emitter for `update`, `ack`, `response`, & `timeout events.
+Sends a message to a subscriber with the expectation of at least one reply. Main callback only listens for the final reply. Can get updates to provide realtime stats/progress and/or acknowledgments to reset timeouts. Returns event emitter for `update`, `ack`, `response`, & `timeout` events.
 
  - `subject` *string* - subject to publish message to
  - `message` *object|array|string|buffer* - Message body for published message
  - `options` *object* - Options passed to `PUB` [method](http://nats.io/documentation/internals/nats-protocol/#PUB).
    - `max` *number* - Number of replies to receive before unsubscribing from replies, optional
    - `timeout` *number* - Number of ms to wait until firing a timeout error. If omitted it will default to config settings. Setting to falsey value will disable timeout
- - `callback *function* - Optional callback fired when final response is sent. Callback includes two arguments
+ - `callback` *function* - Optional callback fired when final response is sent. Callback includes two arguments
    - `err` *error|null* - If the response failed via timeout or was reported as an error from the response.
    - `results` **object|array|string|buffer* - Response body
  - `updateCallback` *function* - Optional callback fired when update is sent. Callback includes one argument
@@ -38,7 +38,7 @@ Sends a message to a subscriber with the expectation of at least one reply. Main
   });
   ```
   ##### `app.nats.subscribe(subject, options, callback, updateCallback)`
-Sends a message to a subscriber with the expectation of at least one reply. Main callback only listens for the final reply. Can get updates to provide realtime stats/progress and/or acknowledgments to reset timeouts. Returns event emitter for `update`, `ack`, `response`, & `timeout events.
+Sends a message to a subscriber with the expectation of at least one reply. Main callback only listens for the final reply. Can get updates to provide realtime stats/progress and/or acknowledgments to reset timeouts. Returns event emitter for `update`, `ack`, `response`, & `timeout` events.
 
  - `subject` *string* - subject to subscribe to
  - `options` *object* - Options passed to `PUB` [method](http://nats.io/documentation/internals/nats-protocol/#PUB).

@@ -225,6 +225,10 @@ module.exports = require('appframe')().registerPlugin({
 			}
 			app.error('NATS error!').debug(err);
 		});
+		app.nats.connection.on('permission_error', function(err){
+			app.emit('nats.permission_error');
+			app.warn('[NATS] Permission error').debug(err);
+		});
 		app.nats.connection.on('reconnect', function(){
 			app.emit('nats.reconnected');
 			app.log('[NATS] Reconnected to server.');
