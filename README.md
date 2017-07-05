@@ -2,7 +2,7 @@
 [NATS](http://nats.io/) Plugin for Appframe on NPM
 
 ## API
-This api uis mounted at `app.nats` to access these methods:
+This api is mounted at `app.nats` to access these methods:
 
 ##### `app.nats.publish(subject, message, callback)`
 Sends a message to a subscriber. Expects no response. Callback issued when message is sent to the NATS server. No guarantee of receipt.
