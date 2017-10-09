@@ -159,7 +159,7 @@ module.exports = require('appframe')().registerPlugin({
 				}
 				if(error){
 					process.nextTick(function(){
-						request.events.emit("response", app.errorCode("nats.publish_message_error", response));
+						request.events.emit("response", app.errorCode("nats.publish_message_error", error));
 					});
 				}
 				return request;

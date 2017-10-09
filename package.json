@@ -1,6 +1,6 @@
 {
   "name": "appframe-nats",
-  "version": "1.5.4",
+  "version": "1.5.5",
   "description": "NATS Plugin for Appframe on NPM",
   "main": "appframe.nats.js",
   "scripts": {
@@ -32,9 +32,9 @@
     "nats": "0.7.20"
   },
   "devDependencies": {
-    "eslint": "3.19.0",
-    "eslint-config-nodecraft": "1.0.5",
+    "eslint": "4.8.0",
+    "eslint-config-nodecraft": "1.0.8",
     "eslint-plugin-json": "1.2.0",
-    "eslint-plugin-node": "4.2.2"
+    "eslint-plugin-node": "5.2.0"
   }
 }
