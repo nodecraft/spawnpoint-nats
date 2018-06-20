@@ -1,6 +1,6 @@
 {
   "name": "appframe-nats",
-  "version": "1.5.7",
+  "version": "1.5.8",
   "description": "NATS Plugin for Appframe on NPM",
   "main": "appframe.nats.js",
   "scripts": {
@@ -19,7 +19,7 @@
     "pub",
     "sub"
   ],
-  "author": "NodeCraft Hosting LLC",
+  "author": "Nodecraft Inc.",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/nodecraft/appframe-nats.js/issues"
@@ -29,7 +29,7 @@
     "appframe": "*",
     "eventemitter2": "*",
     "lodash": "*",
-    "nats": "^0.8.10"
+    "nats": "^1.0.0"
   },
   "devDependencies": {
     "eslint": "^4.19.1",
