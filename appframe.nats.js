@@ -13,28 +13,30 @@ module.exports = require('appframe')().registerPlugin({
 	namespace: "nats",
 	callback: true,
 	exports: function(app, initCallback){
+		const config = app.config[this.namespace];
+		const appNS = this.namespace;
 
 		// read TLS files
-		if(app.config.nats && app.config.nats.connection.tls){
-			if(app.config.nats.connection.tls.ca_file){
-				app.config.nats.connection.tls.ca = [fs.readFileSync(path.join(app.cwd, app.config.nats.connection.tls.ca_file), 'utf8')];
-				delete app.config.nats.connection.tls.ca_file;
+		if(config && config.connection.tls){
+			if(config.connection.tls.ca_file){
+				config.connection.tls.ca = [fs.readFileSync(path.join(app.cwd, config.connection.tls.ca_file), 'utf8')];
+				delete config.connection.tls.ca_file;
 			}
-			if(app.config.nats.connection.tls.ca_files){
+			if(config.connection.tls.ca_files){
 				var certs = [];
-				_.each(app.config.nats.connection.tls.ca_files, function(caCert){
+				_.each(config.connection.tls.ca_files, function(caCert){
 					certs.push(fs.readFileSync(path.join(app.cwd, caCert), 'utf8'));
 				});
-				app.config.nats.connection.tls.ca = certs;
-				delete app.config.nats.connection.tls.ca_files;
+				config.connection.tls.ca = certs;
+				delete config.connection.tls.ca_files;
 			}
-			if(app.config.nats.connection.tls.key_file){
-				app.config.nats.connection.tls.key = fs.readFileSync(path.join(app.cwd, app.config.nats.connection.tls.key_file), 'utf8');
-				delete app.config.nats.connection.tls.key_file;
+			if(config.connection.tls.key_file){
+				config.connection.tls.key = fs.readFileSync(path.join(app.cwd, config.connection.tls.key_file), 'utf8');
+				delete config.connection.tls.key_file;
 			}
-			if(app.config.nats.connection.tls.cert_file){
-				app.config.nats.connection.tls.cert_file = fs.readFileSync(path.join(app.cwd, app.config.nats.connection.tls.cert_file), 'utf8');
-				delete app.config.nats.connection.tls.cert_file;
+			if(config.connection.tls.cert_file){
+				config.connection.tls.cert_file = fs.readFileSync(path.join(app.cwd, config.connection.tls.cert_file), 'utf8');
+				delete config.connection.tls.cert_file;
 			}
 		}
 
@@ -54,7 +56,7 @@ module.exports = require('appframe')().registerPlugin({
 				var handler = new EventEmitter2();
 				handler.once('response', function(err, results){
 					handler.removeAllListeners();
-					return app.nats.connection.publish(replyTo, {
+					return app[appNS].connection.publish(replyTo, {
 						type: 'response',
 						results: results || null,
 						error: err || null
@@ -65,13 +67,13 @@ module.exports = require('appframe')().registerPlugin({
 					if(isNaN(timeout) || timeout < 1){
 						timeout = null;
 					}
-					return app.nats.connection.publish(replyTo, {
+					return app[appNS].connection.publish(replyTo, {
 						type: 'ack',
 						timeout: timeout
 					});
 				});
 				handler.on('update', function(results){
-					return app.nats.connection.publish(replyTo, {
+					return app[appNS].connection.publish(replyTo, {
 						type: 'update',
 						results: results
 					});
@@ -89,7 +91,7 @@ module.exports = require('appframe')().registerPlugin({
 				return handler;
 			}
 		};
-		app.nats = {
+		app[appNS] = {
 			request: function(subject, msg, options, callback, updateCallback){
 				if(options && callback && !updateCallback && typeof(options) === 'function' && typeof(callback) === 'function'){
 					updateCallback = callback;
@@ -103,14 +105,14 @@ module.exports = require('appframe')().registerPlugin({
 				updateCallback = updateCallback || function(){};
 
 				var request = {
-					options: _.defaults(options, app.config.nats.request_defaults),
+					options: _.defaults(options, config.request_defaults),
 					events: new EventEmitter2(),
 					timeout: null
 				};
 				request.events.once('response', function(err, response){
 					// perform cleanup
 					request.events.removeAllListeners();
-					app.nats.connection.unsubscribe(request.sid);
+					app[appNS].connection.unsubscribe(request.sid);
 					return callback(err, response);
 				});
 				request.events.on('update', updateCallback);
@@ -150,7 +152,7 @@ module.exports = require('appframe')().registerPlugin({
 				};
 				var error = null;
 				try{
-					request.sid = app.nats.connection.request(subject, msg, request.options.reply, handler);
+					request.sid = app[appNS].connection.request(subject, msg, request.options.reply, handler);
 					if(request.options.timeout){
 						request.timeout = helpers.createTimeout(request);
 					}
@@ -167,7 +169,7 @@ module.exports = require('appframe')().registerPlugin({
 			publish: function(subject, msg, callback){
 				var error = null;
 				try{
-					return app.nats.connection.publish(subject, msg, callback || function(){});
+					return app[appNS].connection.publish(subject, msg, callback || function(){});
 				}catch(err){
 					error = err;
 				}
@@ -181,12 +183,12 @@ module.exports = require('appframe')().registerPlugin({
 					options = {};
 				}
 				callback = callback || function(){};
-				if(app.config.nats.subscribe_prefix && !options.noPrefix){
-					subject = app.config.nats.subscribe_prefix + subject;
+				if(config.subscribe_prefix && !options.noPrefix){
+					subject = config.subscribe_prefix + subject;
 				}
-				return app.nats.connection.subscribe(subject, options, function(response, replyTo, sentSubject){
-					if(sentSubject && app.config.nats.subscribe_prefix && !options.noPrefix){
-						sentSubject = sentSubject.slice(app.config.nats.subscribe_prefix.length || 0);
+				return app[appNS].connection.subscribe(subject, options, function(response, replyTo, sentSubject){
+					if(sentSubject && config.subscribe_prefix && !options.noPrefix){
+						sentSubject = sentSubject.slice(config.subscribe_prefix.length || 0);
 					}
 					var errored = response instanceof Error;
 					if(errored){
@@ -207,45 +209,45 @@ module.exports = require('appframe')().registerPlugin({
 				});
 			}
 		};
-		app.nats.message = app.nats.publish;
-		app.nats.handle = app.nats.subscribe;
+		app[appNS].message = app[appNS].publish;
+		app[appNS].handle = app[appNS].subscribe;
 
-		app.nats.live = false;
-		app.nats.connection = nats.connect(app.config.nats.connection);
-		app.nats.connection.once('connect', function(){
+		app[appNS].live = false;
+		app[appNS].connection = nats.connect(config.connection);
+		app[appNS].connection.once('connect', function(){
 			app.log('[NATS] Connected to server');
-			app.nats.live = true;
+			app[appNS].live = true;
 			app.emit('app.register', 'nats');
 			app.emit('nats.connected');
 			return initCallback();
 		});
-		app.nats.connection.on('error', function(err){
-			if(!app.nats.live){
+		app[appNS].connection.on('error', function(err){
+			if(!app[appNS].live){
 				return initCallback(err);
 			}
 			app.error('NATS error!').debug(err);
 		});
-		app.nats.connection.on('permission_error', function(err){
+		app[appNS].connection.on('permission_error', function(err){
 			app.emit('nats.permission_error');
 			app.warn('[NATS] Permission error').debug(err);
 		});
-		app.nats.connection.on('reconnect', function(){
+		app[appNS].connection.on('reconnect', function(){
 			app.emit('nats.reconnected');
 			app.log('[NATS] Reconnected to server.');
 		});
-		app.nats.connection.on('reconnecting', function(){
+		app[appNS].connection.on('reconnecting', function(){
 			app.emit('nats.reconnecting');
 			app.warn('[NATS] Lost connection from server. Reconnecting...');
 		});
-		app.nats.connection.on('close', function(){
+		app[appNS].connection.on('close', function(){
 			app.emit('nats.close');
 			app.warn('[NATS] Closed connection to server.');
 		});
 
 		// handle shutdown
 		app.once('app.close', function(){
-			app.nats.connection.close();
-			app.nats.connection.once('close', function(){
+			app[appNS].connection.close();
+			app[appNS].connection.once('close', function(){
 				app.log('[NATS] Closed connection to server.');
 				return app.emit('app.deregister', 'nats');
 			});

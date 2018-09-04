@@ -1,40 +1,41 @@
 {
-  "name": "appframe-nats",
-  "version": "1.5.9",
-  "description": "NATS Plugin for Appframe on NPM",
-  "main": "appframe.nats.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "lint": "eslint ."
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/nodecraft/appframe-nats.js.git"
-  },
-  "keywords": [
-    "nats",
-    "appframe",
-    "message bus",
-    "message queue",
-    "pub",
-    "sub"
-  ],
-  "author": "Nodecraft Inc.",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/nodecraft/appframe-nats.js/issues"
-  },
-  "homepage": "https://github.com/nodecraft/appframe-nats.js#readme",
-  "dependencies": {
-    "appframe": "*",
-    "eventemitter2": "*",
-    "lodash": "*",
-    "nats": "^1.0.1"
-  },
-  "devDependencies": {
-    "eslint": "^5.4.0",
-    "eslint-config-nodecraft": "^1.0.14",
-    "eslint-plugin-json": "^1.2.1",
-    "eslint-plugin-node": "^7.0.1"
-  }
+	"name": "appframe-nats",
+	"version": "1.6.0",
+	"description": "NATS Plugin for Appframe on NPM",
+	"main": "appframe.nats.js",
+	"scripts": {
+		"test": "npm run lint",
+		"lint": "eslint .",
+		"precommit": "lint"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/nodecraft/appframe-nats.js.git"
+	},
+	"keywords": [
+		"nats",
+		"appframe",
+		"message bus",
+		"message queue",
+		"pub",
+		"sub"
+	],
+	"author": "Nodecraft Inc.",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/nodecraft/appframe-nats.js/issues"
+	},
+	"homepage": "https://github.com/nodecraft/appframe-nats.js#readme",
+	"dependencies": {
+		"appframe": "*",
+		"eventemitter2": "*",
+		"lodash": "*",
+		"nats": "^1.0.1"
+	},
+	"devDependencies": {
+		"eslint": "^5.5.0",
+		"eslint-config-nodecraft": "^1.0.14",
+		"eslint-plugin-json": "^1.2.1",
+		"eslint-plugin-node": "^7.0.1"
+	}
 }
