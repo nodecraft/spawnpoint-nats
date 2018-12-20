@@ -1,13 +1,13 @@
 'use strict';
 
-var fs = require('fs'),
+const fs = require('fs'),
 	path = require('path');
 
-var _ = require('lodash'),
+const _ = require('lodash'),
 	nats = require('nats'),
 	EventEmitter2 = require('eventemitter2').EventEmitter2;
 
-module.exports = require('appframe')().registerPlugin({
+module.exports = require('spawnpoint').registerPlugin({
 	dir: __dirname,
 	name: "NATS",
 	namespace: "nats",
