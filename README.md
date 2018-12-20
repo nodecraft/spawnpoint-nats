@@ -1,5 +1,9 @@
 # spawnpoint-nats.js
-[NATS](http://nats.io/) Plugin for [Spawnpoint](https://github.com/nodecraft/spawnpoint) on NPM
+[NATS](https://nats.io/) Plugin for [Spawnpoint](https://github.com/nodecraft/spawnpoint) on NPM
+
+[![npm version](https://badge.fury.io/js/spawnpoint-nats.svg)](https://badge.fury.io/js/spawnpoint-nats)
+[![dependencies Status](https://david-dm.org/nodecraft/spawnpoint-nats/status.svg)](https://david-dm.org/nodecraft/spawnpoint-nats)
+[![Build Status](https://travis-ci.org/nodecraft/spawnpoint-nats.svg?branch=master)](https://travis-ci.org/nodecraft/spawnpoint-nats)
 
 ## API
 This api is mounted at `app.nats` to access these methods:
