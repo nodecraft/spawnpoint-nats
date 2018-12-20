@@ -1,5 +1,5 @@
-# appframe-nats.js
-[NATS](http://nats.io/) Plugin for Appframe on NPM
+# spawnpoint-nats.js
+[NATS](http://nats.io/) Plugin for [Spawnpoint](https://github.com/nodecraft/spawnpoint) on NPM
 
 ## API
 This api is mounted at `app.nats` to access these methods:
@@ -22,7 +22,7 @@ Sends a message to a subscriber with the expectation of at least one reply. Main
    - `err` *error|null* - If the response failed via timeout or was reported as an error from the response.
    - `results` **object|array|string|buffer* - Response body
  - `updateCallback` *function* - Optional callback fired when update is sent. Callback includes one argument
-   - `results` **object|array|string|buffer* - Response body
+   - `results` *object|array|string|buffer* - Response body
 
 ###### Example:
  ```javascript
