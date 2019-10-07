@@ -3,7 +3,8 @@
 
 [![npm version](https://badge.fury.io/js/spawnpoint-nats.svg)](https://badge.fury.io/js/spawnpoint-nats)
 [![dependencies Status](https://david-dm.org/nodecraft/spawnpoint-nats/status.svg)](https://david-dm.org/nodecraft/spawnpoint-nats)
-[![Build Status](https://travis-ci.org/nodecraft/spawnpoint-nats.svg?branch=master)](https://travis-ci.org/nodecraft/spawnpoint-nats) [![Greenkeeper badge](https://badges.greenkeeper.io/nodecraft/spawnpoint-nats.svg)](https://greenkeeper.io/)
+[![Actions Status](https://github.com/nodecraft/spawnpoint-nats/workflows/Test/badge.svg)](https://github.com/nodecraft/spawnpoint-nats/actions?workflow=Test)
+[![Greenkeeper badge](https://badges.greenkeeper.io/nodecraft/spawnpoint-nats.svg)](https://greenkeeper.io/)
 
 ## API
 This api is mounted at `app.nats` to access these methods:
