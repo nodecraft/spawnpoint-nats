@@ -5,7 +5,8 @@
 	    "password": "",
 	    "json": true,
 	    "tls": true,
-	    "maxReconnectAttempts": -1
+	    "maxReconnectAttempts": -1,
+	    "timeout": 10000
 	},
 	"request_defaults": {
 		"timeout": 5000
