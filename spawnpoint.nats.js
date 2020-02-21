@@ -23,7 +23,7 @@ module.exports = require('spawnpoint').registerPlugin({
 				delete config.connection.tls.ca_file;
 			}
 			if(config.connection.tls.ca_files){
-				var certs = [];
+				const certs = [];
 				_.each(config.connection.tls.ca_files, function(caCert){
 					certs.push(fs.readFileSync(path.join(app.cwd, caCert), 'utf8'));
 				});
@@ -40,9 +40,9 @@ module.exports = require('spawnpoint').registerPlugin({
 			}
 		}
 
-		var helpers = {
+		const helpers = {
 			createTimeout: function(request){
-				var timeout = request.options.timeout;
+				let timeout = request.options.timeout;
 				if(request.ack){
 					timeout = request.ack;
 					delete request.ack;
@@ -53,7 +53,7 @@ module.exports = require('spawnpoint').registerPlugin({
 				}, timeout);
 			},
 			handler: function(replyTo){
-				var handler = new EventEmitter2();
+				const handler = new EventEmitter2();
 				handler.once('response', function(err, results){
 					handler.removeAllListeners();
 					return app[appNS].connection.publish(replyTo, {
@@ -104,7 +104,7 @@ module.exports = require('spawnpoint').registerPlugin({
 				callback = _.once(callback || function(){});
 				updateCallback = updateCallback || function(){};
 
-				var request = {
+				const request = {
 					options: _.defaults(options, config.request_defaults),
 					events: new EventEmitter2(),
 					timeout: null
@@ -116,7 +116,7 @@ module.exports = require('spawnpoint').registerPlugin({
 					return callback(err, response);
 				});
 				request.events.on('update', updateCallback);
-				var handler = function(response){
+				const handler = function(response){
 					switch(response.type){
 						case "ack":
 							if(request.timeout){
@@ -150,7 +150,7 @@ module.exports = require('spawnpoint').registerPlugin({
 							app.warn('Invalid response received for request').debug(response);
 					}
 				};
-				var error = null;
+				let error = null;
 				try{
 					request.sid = app[appNS].connection.request(subject, msg, request.options.reply, handler);
 					if(request.options.timeout){
@@ -167,7 +167,7 @@ module.exports = require('spawnpoint').registerPlugin({
 				return request;
 			},
 			publish: function(subject, msg, callback){
-				var error = null;
+				let error = null;
 				try{
 					return app[appNS].connection.publish(subject, msg, callback || function(){});
 				}catch(err){
@@ -190,7 +190,7 @@ module.exports = require('spawnpoint').registerPlugin({
 					if(sentSubject && config.subscribe_prefix && !options.noPrefix){
 						sentSubject = sentSubject.slice(config.subscribe_prefix.length || 0);
 					}
-					var errored = response instanceof Error;
+					const errored = response instanceof Error;
 					if(errored){
 						app.emit('nats.subscribe_message_error', response);
 					}
@@ -198,7 +198,7 @@ module.exports = require('spawnpoint').registerPlugin({
 						if(errored){ return; }
 						return callback(response, null, sentSubject);
 					}
-					var handler = helpers.handler(replyTo);
+					const handler = helpers.handler(replyTo);
 					if(errored){
 						return handler.response(app.errorCode("nats.subscribe_message_error", response));
 					}
