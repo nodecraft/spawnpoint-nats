@@ -30,7 +30,7 @@
 	"dependencies": {
 		"eventemitter2": "*",
 		"lodash": "*",
-		"nats": "1.4.0",
+		"nats": "1.4.6",
 		"spawnpoint": "*"
 	},
 	"devDependencies": {
