@@ -1,6 +1,6 @@
 {
 	"name": "spawnpoint-nats",
-	"version": "1.7.2",
+	"version": "1.7.3",
 	"description": "NATS Plugin for Spawnpoint on NPM",
 	"main": "spawnpoint.nats.js",
 	"scripts": {
@@ -30,13 +30,13 @@
 	"dependencies": {
 		"eventemitter2": "*",
 		"lodash": "*",
-		"nats": "1.4.0",
+		"nats": "1.4.6",
 		"spawnpoint": "*"
 	},
 	"devDependencies": {
 		"eslint": "^6.8.0",
 		"eslint-config-nodecraft": "^2.1.4",
-		"eslint-plugin-json": "^2.1.0",
+		"eslint-plugin-json": "^2.1.1",
 		"eslint-plugin-node": "^11.0.0"
 	}
 }
