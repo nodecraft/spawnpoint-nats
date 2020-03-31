@@ -4,7 +4,7 @@ const fs = require('fs'),
 	path = require('path');
 
 const _ = require('lodash'),
-	nats = require('nats'),
+	nats = require('nats'), // eslint-disable-line node/no-missing-require
 	EventEmitter2 = require('eventemitter2').EventEmitter2;
 
 module.exports = require('spawnpoint').registerPlugin({
@@ -38,6 +38,16 @@ module.exports = require('spawnpoint').registerPlugin({
 				config.connection.tls.cert_file = fs.readFileSync(path.join(app.cwd, config.connection.tls.cert_file), 'utf8');
 				delete config.connection.tls.cert_file;
 			}
+		}
+
+		// set client name to "app@1.0.0 node@12.x.x"
+		if(!config.connection.name && app.config.name){
+			config.connection.name = app.config.name;
+			if(app.config.version){
+				config.connection.name += `@${app.config.version}`;
+			}
+
+			config.connection.name += ` node@${process.version}`;
 		}
 
 		const helpers = {

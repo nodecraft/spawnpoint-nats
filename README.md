@@ -6,6 +6,11 @@
 [![Actions Status](https://github.com/nodecraft/spawnpoint-nats/workflows/Test/badge.svg)](https://github.com/nodecraft/spawnpoint-nats/actions?workflow=Test)
 [![Greenkeeper badge](https://badges.greenkeeper.io/nodecraft/spawnpoint-nats.svg)](https://greenkeeper.io/)
 
+## Installation
+Make sure to install nats and the plugin for Spawnpoint nats separately. Nats is treated as a peer dependency so you can change version separately.
+```npm i nats spawnpoint-nats```
+
+
 ## API
 This api is mounted at `app.nats` to access these methods:
 
