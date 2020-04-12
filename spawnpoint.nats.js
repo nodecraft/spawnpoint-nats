@@ -74,7 +74,7 @@ module.exports = require('spawnpoint').registerPlugin({
 				});
 				handler.on('ack', function(timeout){
 					timeout = timeout || null;
-					if(isNaN(timeout) || timeout < 1){
+					if(Number.isNaN(Number(timeout)) || timeout < 1){
 						timeout = null;
 					}
 					return app[appNS].connection.publish(replyTo, {
