@@ -1,12 +1,8 @@
 {
 	"connection": {
-		"url": "nats://localhost:4222",
-		"user": "",
-	    "password": "",
-	    "json": true,
-	    "tls": true,
-	    "maxReconnectAttempts": -1,
-	    "timeout": 10000
+		"tls": true,
+		"maxReconnectAttempts": -1,
+		"timeout": 10000
 	},
 	"request_defaults": {
 		"timeout": 5000
