@@ -7,9 +7,12 @@
 [![Greenkeeper badge](https://badges.greenkeeper.io/nodecraft/spawnpoint-nats.svg)](https://greenkeeper.io/)
 
 ## Installation
-Make sure to install nats and the plugin for Spawnpoint nats separately. Nats is treated as a peer dependency so you can change version separately.
+Make sure to install NATS and the plugin for Spawnpoint NATS separately. NATS is treated as a peer dependency so you can change version separately.
 ```npm i nats spawnpoint-nats```
 
+## NATS Versions
+- This module's version `2.x.x` is designed for a NATS server running `2.x`
+- This module's version `1.x.x` is designed for a NATS server running `1.x`
 
 ## API
 This api is mounted at `app.nats` to access these methods:
