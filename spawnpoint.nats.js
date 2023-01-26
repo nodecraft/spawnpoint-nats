@@ -1,10 +1,12 @@
+/* eslint-disable node/no-missing-require */
 'use strict';
 
-const path = require('path');
+const path = require('node:path');
+const fs = require('node:fs');
 
-const _ = require('lodash'),
-	nats = require('nats'), // eslint-disable-line node/no-missing-require
-	EventEmitter2 = require('eventemitter2').EventEmitter2;
+const _ = require('lodash');
+const nats = require('nats');
+const EventEmitter2 = require('eventemitter2').EventEmitter2;
 
 module.exports = require('spawnpoint').registerPlugin({
 	dir: __dirname,
@@ -14,8 +16,7 @@ module.exports = require('spawnpoint').registerPlugin({
 	exports: function(app, initCallback){
 		const jsonCodec = nats.JSONCodec();
 		let init = false;
-		new Promise(async (resolve, reject) => {
-
+		(async () => {
 			const config = app.config[this.namespace];
 			const appNS = this.namespace;
 
@@ -38,7 +39,7 @@ module.exports = require('spawnpoint').registerPlugin({
 					delete config.connection.tls.key_file;
 				}
 				if(config.connection.tls.cert_file){
-					config.connection.tls.certFile = path.join(app.cwd, config.connection.tls.cert_file);;
+					config.connection.tls.certFile = path.join(app.cwd, config.connection.tls.cert_file);
 					delete config.connection.tls.cert_file;
 				}
 			}
@@ -54,7 +55,15 @@ module.exports = require('spawnpoint').registerPlugin({
 			}
 
 			const helpers = {
-				createTimeout: function(request){
+				wrapMessageError(error){
+					if(error?.code === nats.ErrorCode.NoResponders){
+						return app.errorCode("nats.no_responders");
+					}else if(error?.code === nats.ErrorCode.Timeout){
+						return app.errorCode("nats.timeout");
+					}
+					return app.errorCode('nats.publish_message_error', error);
+				},
+				createTimeout(request){
 					let timeout = request.options.timeout;
 					if(request.ack){
 						timeout = request.ack;
@@ -65,31 +74,30 @@ module.exports = require('spawnpoint').registerPlugin({
 						request.events.emit('response', app.failCode('nats.timeout'));
 					}, timeout);
 				},
-				handler: function(replyTo){
+				handler(replyTo){
 					const handler = new EventEmitter2();
 					handler.once('response', function(err, results){
 						handler.removeAllListeners();
-						return app[appNS].connection.publish(replyTo, {
+						return app[appNS].connection.publish(replyTo, jsonCodec.encode({
 							type: 'response',
 							results: results || null,
-							error: err || null
-						});
+							error: err || null,
+						}));
 					});
-					handler.on('ack', function(timeout){
-						timeout = timeout || null;
+					handler.on('ack', function(timeout = null){
 						if(Number.isNaN(Number(timeout)) || timeout < 1){
 							timeout = null;
 						}
-						return app[appNS].connection.publish(replyTo, {
+						return app[appNS].connection.publish(replyTo, jsonCodec.encode({
 							type: 'ack',
-							timeout: timeout
-						});
+							timeout: timeout,
+						}));
 					});
 					handler.on('update', function(results){
-						return app[appNS].connection.publish(replyTo, {
+						return app[appNS].connection.publish(replyTo, jsonCodec.encode({
 							type: 'update',
-							results: results
-						});
+							results: results,
+						}));
 					});
 
 					handler.ack = function(timeout){
@@ -102,7 +110,7 @@ module.exports = require('spawnpoint').registerPlugin({
 						return handler.emit('response', err, results);
 					};
 					return handler;
-				}
+				},
 			};
 			app[appNS] = {
 				request: function(subject, msg, options, callback, updateCallback){
@@ -119,78 +127,104 @@ module.exports = require('spawnpoint').registerPlugin({
 
 					const request = {
 						options: {
-							...options,
 							...config.request_defaults,
+							...options,
 						},
 						events: new EventEmitter2(),
-						timeout: null
+						timeout: null,
+						maxWaitTimeout: null,
 					};
 					request.events.once('response', function(err, response){
+						if(request.timeout){
+							clearTimeout(request.timeout);
+						}
+						if(request.maxWaitTimeout){
+							clearTimeout(request.maxWaitTimeout);
+						}
 						// perform cleanup
 						request.events.removeAllListeners();
-						app[appNS].connection.unsubscribe(request.sid);
+						if(request.asyncIterator){
+							// stop the async iterator and run cleanup
+							request.asyncIterator.stop();
+						}
 						return callback(err, response);
 					});
 					request.events.on('update', updateCallback);
-					const handler = function(response){
-						switch(response.type){
-							case "ack":
-								if(request.timeout){
-									clearTimeout(request.timeout);
-									if(response.timeout){
-										request.ack = response.timeout;
+					if(request.options.timeout){
+						request.timeout = helpers.createTimeout(request);
+					}
+					// timeout is called maxWait in requestMany
+					// store the promise so we can cancel it if needed
+					(async () => {
+						const manyOptions = {
+							...request.options,
+						};
+						// maxWait is a special option for requestMany
+						// it is the max time to wait for a response
+						// if it is -1, it will wait "forever"
+						// but we can't pass -1 to requestMany
+						// so we pass the max 32 bit signed integer
+						if(manyOptions.maxWait === -1){
+							manyOptions.maxWait = 2_147_483_647;
+						}
+						request.maxWaitTimeout = setTimeout(() => {
+							request.events.emit('timeout');
+							request.events.emit('response', app.failCode('nats.timeout'));
+						}, manyOptions.maxWait);
+						request.asyncIterator = await app[appNS].connection.requestMany(subject, jsonCodec.encode(msg), manyOptions);
+						for await(const req of request.asyncIterator){
+							const response = jsonCodec.decode(req.data);
+							switch(response.type){
+								case "ack": {
+									if(request.timeout){
+										clearTimeout(request.timeout);
+										if(response.timeout){
+											request.ack = response.timeout;
+										}
+										request.timeout = helpers.createTimeout(request);
 									}
-									request.timeout = helpers.createTimeout(request);
+									request.events.emit("ack", response.results || {});
+									break;
 								}
-								request.events.emit("ack", response.results || {});
-								break;
-							case "update":
-								if(request.timeout){
-									clearTimeout(request.timeout);
-									request.timeout = helpers.createTimeout(request);
+								case "update": {
+									if(request.timeout){
+										clearTimeout(request.timeout);
+										request.timeout = helpers.createTimeout(request);
+									}
+									request.events.emit("update", response.results || {});
+									break;
 								}
-								request.events.emit("update", response.results || {});
-								break;
-							case "response":
-								if(request.timeout){
-									clearTimeout(request.timeout);
-									request.timeout = helpers.createTimeout(request);
+								case "response": {
+									if(!response.error && response.results instanceof Error){
+										response.error = response.results;
+										response.results = null;
+									}
+									request.events.emit("response", response.error || null, response.results || null);
+									break;
 								}
-								if(!response.error && response.results instanceof Error){
-									response.error = response.results;
-									response.results = null;
+								default: {
+									app.warn('Invalid response received for request').debug(response);
 								}
-								request.events.emit("response", response.error || null, response.results || null);
-								break;
-							default:
-								app.warn('Invalid response received for request').debug(response);
+							}
 						}
-					};
-					let error = null;
-					try{
-						request.sid = app[appNS].connection.request(subject, msg, request.options.reply, handler);
-						if(request.options.timeout){
-							request.timeout = helpers.createTimeout(request);
-						}
-					}catch(err){
-						error = err;
-					}
-					if(error){
-						process.nextTick(function(){
-							request.events.emit("response", app.errorCode("nats.publish_message_error", error));
-						});
-					}
-					return request;
+					})().then(() => {}).catch((error) => {
+						request.events.emit("response", helpers.wrapMessageError(error));
+					});
 				},
-				publish: function(subject, msg, callback){
-					let error = null;
-					try{
-						return app[appNS].connection.publish(subject, msg, callback || function(){});
-					}catch(err){
-						error = err;
+				publish: function(subject, msg, options, callback){
+					if(!options && !callback){
+						options = {};
+						callback = () => {};
+					}else if(options && !callback){
+						callback = options;
+						options = {};
 					}
-					if(error){
-						return callback(error);
+					const error = null;
+					try{
+						app[appNS].connection.publish(subject, jsonCodec.encode(msg), options);
+						return callback(); // assume it was sent?
+					}catch{
+						return callback(helpers.wrapMessageError(error));
 					}
 				},
 				subscribe: function(subject, options, callback){
@@ -202,58 +236,60 @@ module.exports = require('spawnpoint').registerPlugin({
 					if(config.subscribe_prefix && !options.noPrefix){
 						subject = config.subscribe_prefix + subject;
 					}
-					console.log('sub', subject, options);
-					try{
-						const subscription = app[appNS].connection.subscribe(subject, options);
-						(async () => {
-							for await (const message of subscription){
-								// console.dir(message, {depth: null});
-								const handler = message.reply ? helpers.handler(message.reply) : null;
-								const error = null; //nats.isRequestError(message);
-								if(error){
-									app.emit('nats.subscribe_message_error', response);
-									handler?.response?.(app.errorCode("nats.subscribe_message_error", response));
-								}else{
-									const body = jsonCodec.decode(message.data);
-									let sentSubject = message.subject;
-									if(sentSubject && config.subscribe_prefix && !options.noPrefix){
-										sentSubject = sentSubject.slice(config.subscribe_prefix.length || 0);
-									}
-									if(!options.noAck){
-										handler?.ack?.();
-									}
-									callback(body, handler, sentSubject)
-								}
+					let subscription;
+					(async () => {
+						subscription = app[appNS].connection.subscribe(subject, options);
+						for await(const message of subscription){
+							const handler = message.reply ? helpers.handler(message.reply) : null;
+							let sentSubject = message.subject;
+							if(sentSubject && config.subscribe_prefix && !options.noPrefix){
+								sentSubject = sentSubject.slice(config?.subscribe_prefix?.length ?? 0);
 							}
-						})().then();
-						console.log('got all msg lol')
-					}catch(err){
-						return callback(err);
-					}
-				}
+							try{
+								const body = jsonCodec.decode(message.data);
+								if(!options.noAck){
+									handler?.ack?.();
+								}
+								// eslint-disable-next-line callback-return
+								callback(body, handler, sentSubject);
+							}catch(error){
+								app.emit('nats.subscribe_message_error', {
+									subject: sentSubject,
+									error,
+								});
+								handler?.response?.(app.errorCode("nats.subscribe_message_error", error));
+							}
+						}
+					})().then().catch((err) => {
+						const error = app.errorCode("nats.subscribe_message_error", err);
+						app.emit('nats.subscribe_message_error', error);
+						throw error;
+					});
+					return subscription;
+				},
 			};
 			app[appNS].message = app[appNS].publish;
 			app[appNS].handle = app[appNS].subscribe;
 
 			app[appNS].connection = await nats.connect(config.connection);
-			// console.dir({nats}, {depth: null});
-			// console.dir(app[appNS].connection, {depth: null});
 			app.once('app.close', async () => {
 				await app[appNS].connection.close();
 			});
 			app.emit('app.register', 'nats');
 			app.emit('nats.connected');
-			resolve();
+			init = true;
+			initCallback();
 			(async () => {
-				for await (const status of app[appNS].connection.status()){
+				for await(const status of app[appNS].connection.status()){
 					if(status.type === 'reconnecting'){
 						app.emit('nats.reconnecting');
 						app.warn('[NATS] Lost connection from server. Reconnecting...');
 					}else if(status.type === 'reconnect'){
 						app.emit('nats.reconnected');
 						app.log('[NATS] Reconnected to server.');
-					}else{
-						console.dir(status, {depth: null});
+					}else if(status.type === 'error'){
+						app.emit('nats.error', status.data);
+						app.error('[NATS] Error was triggered').debug(status.data);
 					}
 				}
 			})().then();
@@ -261,10 +297,7 @@ module.exports = require('spawnpoint').registerPlugin({
 			app.warn('[NATS] Closed connection to server.');
 			app.emit('nats.close');
 			app.emit('app.deregister', 'nats');
-		}).then(() => {
-			init = true;
-			initCallback();
-		}).catch((err) => {
+		})().then().catch((err) => {
 			if(!init){
 				init = true;
 				initCallback(err);
@@ -272,5 +305,5 @@ module.exports = require('spawnpoint').registerPlugin({
 			app.emit('nats.error', err);
 			app.error('[NATS] Error was triggered').debug(err);
 		});
-	}
+	},
 });

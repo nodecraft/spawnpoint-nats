@@ -5,7 +5,9 @@
 		"timeout": 10000
 	},
 	"request_defaults": {
-		"timeout": 5000
+		"timeout": 5000,
+		"maxMessages": -1,
+		"maxWait": -1
 	},
 	"subscribe_prefix": ""
 }

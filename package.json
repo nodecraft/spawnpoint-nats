@@ -1,6 +1,6 @@
 {
 	"name": "spawnpoint-nats",
-	"version": "1.7.5",
+	"version": "2.0.0",
 	"description": "NATS Plugin for Spawnpoint on NPM",
 	"main": "spawnpoint.nats.js",
 	"scripts": {
@@ -40,5 +40,8 @@
 		"eslint": "^8.32.0",
 		"eslint-plugin-json": "^3.1.0",
 		"eslint-plugin-node": "^11.1.0"
+	},
+	"engines": {
+		"node": ">=16.12.0"
 	}
 }
