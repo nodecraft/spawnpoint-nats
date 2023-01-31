@@ -273,7 +273,7 @@ module.exports = require('spawnpoint').registerPlugin({
 
 			app[appNS].connection = await nats.connect(config.connection);
 			app.once('app.close', async () => {
-				await app[appNS].connection.close();
+				await app[appNS].connection.drain();
 			});
 			app.emit('app.register', 'nats');
 			app.emit('nats.connected');
@@ -289,7 +289,7 @@ module.exports = require('spawnpoint').registerPlugin({
 						app.log('[NATS] Reconnected to server.');
 					}else if(status.type === 'error'){
 						app.emit('nats.error', status.data);
-						app.error('[NATS] Error was triggered').debug(status.data);
+						app.error('[NATS] Error was triggered').debug(app[appNS].connection.protocol.lastError);
 					}
 				}
 			})().then();
