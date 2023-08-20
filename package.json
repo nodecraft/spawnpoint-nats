@@ -1,6 +1,6 @@
 {
 	"name": "spawnpoint-nats",
-	"version": "2.0.2",
+	"version": "2.0.3",
 	"description": "NATS Plugin for Spawnpoint on NPM",
 	"main": "spawnpoint.nats.js",
 	"scripts": {
@@ -33,11 +33,11 @@
 		"spawnpoint": "*"
 	},
 	"peerDependencies": {
-		"nats": "^2.15.0"
+		"nats": "^2.16.0"
 	},
 	"devDependencies": {
-		"@nodecraft/eslint-config": "^25.0.1",
-		"eslint": "^8.43.0",
+		"@nodecraft/eslint-config": "^27.1.0",
+		"eslint": "^8.47.0",
 		"eslint-plugin-json": "^3.1.0",
 		"eslint-plugin-node": "^11.1.0"
 	},
