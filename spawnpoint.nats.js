@@ -54,6 +54,17 @@ module.exports = require('spawnpoint').registerPlugin({
 				config.connection.name += ` node@${process.version}`;
 			}
 
+			// Setup an authenticator if available
+			if(config.connection.auth) {
+				// We want to read in the creds file given to us
+				const authCredsFile = path.join(app.cwd, config.connection.auth.creds_file);
+				delete config.connection.auth.creds_file;
+				const authCreds = fs.readFileSync(authCredsFile, 'utf8');
+				// Create a new credsAuthenticator
+				config.connection.authenticator = nats.credsAuthenticator(authCreds);
+				delete config.connection.auth;
+			}
+
 			const helpers = {
 				wrapMessageError(error) {
 					if(error?.code === nats.ErrorCode.NoResponders) {
