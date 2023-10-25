@@ -59,7 +59,7 @@ module.exports = require('spawnpoint').registerPlugin({
 				// We want to read in the creds file given to us
 				const authCredsFile = path.join(app.cwd, config.connection.auth.creds_file);
 				delete config.connection.auth.creds_file;
-				const authCreds = fs.readFileSync(authCredsFile, 'utf8');
+				const authCreds = fs.readFileSync(authCredsFile);
 				// Create a new credsAuthenticator
 				config.connection.authenticator = nats.credsAuthenticator(authCreds);
 				delete config.connection.auth;
