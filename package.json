@@ -1,8 +1,13 @@
 {
 	"name": "spawnpoint-nats",
-	"version": "2.2.0",
+	"version": "2.3.0",
 	"description": "NATS Plugin for Spawnpoint on NPM",
 	"main": "spawnpoint.nats.js",
+	"files": [
+		"spawnpoint.nats.js",
+		"codes",
+		"config"
+	],
 	"scripts": {
 		"test": "npm run lint",
 		"lint": "eslint .",
