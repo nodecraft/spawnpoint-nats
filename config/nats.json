@@ -1,4 +1,5 @@
 {
+	"lazy": false,
 	"connection": {
 		"tls": true,
 		"maxReconnectAttempts": -1,
