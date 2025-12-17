@@ -3,7 +3,6 @@
 		"@nodecraft/eslint-config"
 	],
 	"plugins": [
-		"json",
-		"node"
+		"json"
 	]
 }

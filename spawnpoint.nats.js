@@ -1,4 +1,3 @@
-/* eslint-disable node/no-missing-require */
 'use strict';
 
 const fs = require('node:fs');
@@ -67,6 +66,68 @@ module.exports = require('spawnpoint').registerPlugin({
 				delete config.connection.auth;
 			}
 
+			// Shared state for lazy connection
+			let connectPromise = null;
+
+			// Helper to perform the actual connection
+			async function doConnect() {
+				app[appNS].connection = await nats.connect(config.connection);
+
+				// Setup close handler
+				app.once('app.close', async () => {
+					if (app[appNS].connection) {
+						await app[appNS].connection.drain();
+					}
+				});
+
+				app.emit('nats.connected');
+
+				// Start status monitoring in the background
+				(async () => {
+					for await (const status of app[appNS].connection.status()) {
+						if (status.type === 'reconnecting') {
+							app.emit('nats.reconnecting');
+							app.warn('[NATS] Lost connection from server. Reconnecting...');
+						} else if (status.type === 'reconnect') {
+							app.emit('nats.reconnected');
+							app.log('[NATS] Reconnected to server.');
+						} else if (status.type === 'error') {
+							app.emit('nats.error', status.data);
+							app.error('[NATS] Error was triggered').debug(app[appNS].connection.protocol.lastError);
+						}
+					}
+				})().then();
+
+				// Wait for connection to close (in background)
+				(async () => {
+					await app[appNS].connection.closed();
+					app.warn('[NATS] Closed connection to server.');
+					app.emit('nats.close');
+					app.emit('app.deregister', 'nats');
+				})().then();
+
+				return app[appNS].connection;
+			}
+
+			// Ensure connection exists, connecting lazily if needed
+			async function ensureConnected() {
+				if (app[appNS].connection) {
+					return app[appNS].connection;
+				}
+				if (connectPromise) {
+					return connectPromise;
+				}
+				connectPromise = doConnect();
+				try {
+					await connectPromise;
+					connectPromise = null; // Clear for clean state
+					return app[appNS].connection;
+				} catch (err) {
+					connectPromise = null; // Allow retry on failure
+					throw err;
+				}
+			}
+
 			const helpers = {
 				wrapMessageError(error) {
 					if (error?.code === nats.ErrorCode.NoResponders) {
@@ -125,7 +186,115 @@ module.exports = require('spawnpoint').registerPlugin({
 					return handler;
 				},
 			};
+
+			// Internal implementation of publish (assumes connection exists)
+			function doPublish(subject, msg, options, callback) {
+				try {
+					app[appNS].connection.publish(subject, jsonCodec.encode(msg), options);
+					return callback(); // assume it was sent?
+				} catch (err) {
+					return callback(helpers.wrapMessageError(err));
+				}
+			}
+
+			// Internal implementation of subscribe (assumes connection exists)
+			function doSubscribe(subject, options, callback) {
+				const subscription = app[appNS].connection.subscribe(subject, options);
+				(async () => {
+					for await (const message of subscription) {
+						const handler = message.reply ? helpers.handler(message.reply) : null;
+						let sentSubject = message.subject;
+						if (sentSubject && config.subscribe_prefix && !options.noPrefix) {
+							sentSubject = sentSubject.slice(config?.subscribe_prefix?.length ?? 0);
+						}
+						try {
+							const body = jsonCodec.decode(message.data);
+							if (!options.noAck) {
+								handler?.ack?.();
+							}
+							// eslint-disable-next-line callback-return
+							callback(body, handler, sentSubject);
+						} catch (error) {
+							app.emit('nats.subscribe_message_error', {
+								subject: sentSubject,
+								error,
+							});
+							handler?.response?.(app.errorCode('nats.subscribe_message_error', error));
+						}
+					}
+				})().then().catch((err) => {
+					const error = app.errorCode('nats.subscribe_message_error', err);
+					app.emit('nats.subscribe_message_error', error);
+					throw error;
+				});
+				return subscription;
+			}
+
+			// Internal implementation of request (assumes connection exists)
+			function doRequest(subject, msg, options, callback, updateCallback, request) {
+				(async () => {
+					const manyOptions = {
+						...request.options,
+					};
+					// maxWait is a special option for requestMany
+					// it is the max time to wait for a response
+					// if it is -1, it will wait "forever"
+					// but we can't pass -1 to requestMany
+					// so we pass the max 32 bit signed integer
+					if (manyOptions.maxWait === -1) {
+						manyOptions.maxWait = 2_147_483_647;
+					}
+					request.maxWaitTimeout = setTimeout(() => {
+						request.events.emit('timeout');
+						request.events.emit('response', app.failCode('nats.timeout'));
+					}, manyOptions.maxWait);
+					request.asyncIterator = await app[appNS].connection.requestMany(subject, jsonCodec.encode(msg), manyOptions);
+					for await (const req of request.asyncIterator) {
+						const response = jsonCodec.decode(req.data);
+						switch (response.type) {
+							case 'ack': {
+								if (request.timeout) {
+									clearTimeout(request.timeout);
+									if (response.timeout) {
+										request.ack = response.timeout;
+									}
+									request.timeout = helpers.createTimeout(request);
+								}
+								request.events.emit('ack', response.results || {});
+								break;
+							}
+							case 'update': {
+								if (request.timeout) {
+									clearTimeout(request.timeout);
+									request.timeout = helpers.createTimeout(request);
+								}
+								request.events.emit('update', response.results || {});
+								break;
+							}
+							case 'response': {
+								if (!response.error && response.results instanceof Error) {
+									response.error = response.results;
+									response.results = null;
+								}
+								request.events.emit('response', response.error || null, response.results || null);
+								break;
+							}
+							default: {
+								app.warn('Invalid response received for request').debug(response);
+							}
+						}
+					}
+				})().then(() => {}).catch((error) => {
+					request.events.emit('response', helpers.wrapMessageError(error));
+				});
+			}
+
 			app[appNS] = {
+				// Manual connect method for pre-warming connection
+				connect: async function() {
+					return ensureConnected();
+				},
+
 				request: function(subject, msg, options, callback, updateCallback) {
 					if (options && callback && !updateCallback && typeof(options) === 'function' && typeof(callback) === 'function') {
 						updateCallback = callback;
@@ -163,67 +332,28 @@ module.exports = require('spawnpoint').registerPlugin({
 						return callback(err, response);
 					});
 					request.events.on('update', updateCallback);
-					if (request.options.timeout) {
-						request.timeout = helpers.createTimeout(request);
-					}
-					// timeout is called maxWait in requestMany
-					// store the promise so we can cancel it if needed
-					(async () => {
-						const manyOptions = {
-							...request.options,
-						};
-						// maxWait is a special option for requestMany
-						// it is the max time to wait for a response
-						// if it is -1, it will wait "forever"
-						// but we can't pass -1 to requestMany
-						// so we pass the max 32 bit signed integer
-						if (manyOptions.maxWait === -1) {
-							manyOptions.maxWait = 2_147_483_647;
-						}
-						request.maxWaitTimeout = setTimeout(() => {
-							request.events.emit('timeout');
-							request.events.emit('response', app.failCode('nats.timeout'));
-						}, manyOptions.maxWait);
-						request.asyncIterator = await app[appNS].connection.requestMany(subject, jsonCodec.encode(msg), manyOptions);
-						for await (const req of request.asyncIterator) {
-							const response = jsonCodec.decode(req.data);
-							switch (response.type) {
-								case 'ack': {
-									if (request.timeout) {
-										clearTimeout(request.timeout);
-										if (response.timeout) {
-											request.ack = response.timeout;
-										}
-										request.timeout = helpers.createTimeout(request);
-									}
-									request.events.emit('ack', response.results || {});
-									break;
-								}
-								case 'update': {
-									if (request.timeout) {
-										clearTimeout(request.timeout);
-										request.timeout = helpers.createTimeout(request);
-									}
-									request.events.emit('update', response.results || {});
-									break;
-								}
-								case 'response': {
-									if (!response.error && response.results instanceof Error) {
-										response.error = response.results;
-										response.results = null;
-									}
-									request.events.emit('response', response.error || null, response.results || null);
-									break;
-								}
-								default: {
-									app.warn('Invalid response received for request').debug(response);
-								}
+
+					// In lazy mode, ensure connection before starting request
+					// Start timeout only after connection is established to avoid premature timeouts
+					if (config.lazy && !app[appNS].connection) {
+						ensureConnected().then(() => {
+							if (request.options.timeout) {
+								request.timeout = helpers.createTimeout(request);
 							}
+							doRequest(subject, msg, options, callback, updateCallback, request);
+						}).catch((error) => {
+							request.events.emit('response', helpers.wrapMessageError(error));
+						});
+					} else {
+						if (request.options.timeout) {
+							request.timeout = helpers.createTimeout(request);
 						}
-					})().then(() => {}).catch((error) => {
-						request.events.emit('response', helpers.wrapMessageError(error));
-					});
+						doRequest(subject, msg, options, callback, updateCallback, request);
+					}
+
+					return request.events;
 				},
+
 				publish: function(subject, msg, options, callback) {
 					if (!options && !callback) {
 						options = {};
@@ -232,14 +362,20 @@ module.exports = require('spawnpoint').registerPlugin({
 						callback = options;
 						options = {};
 					}
-					const error = null;
-					try {
-						app[appNS].connection.publish(subject, jsonCodec.encode(msg), options);
-						return callback(); // assume it was sent?
-					} catch {
-						return callback(helpers.wrapMessageError(error));
+
+					// In lazy mode, ensure connection before publishing
+					if (config.lazy && !app[appNS].connection) {
+						ensureConnected().then(() => {
+							doPublish(subject, msg, options, callback);
+						}).catch((err) => {
+							callback(helpers.wrapMessageError(err));
+						});
+						return;
 					}
+
+					doPublish(subject, msg, options, callback);
 				},
+
 				subscribe: function(subject, options, callback) {
 					if (options && !callback) {
 						callback = options;
@@ -249,67 +385,94 @@ module.exports = require('spawnpoint').registerPlugin({
 					if (config.subscribe_prefix && !options.noPrefix) {
 						subject = config.subscribe_prefix + subject;
 					}
-					let subscription;
-					(async () => {
-						subscription = app[appNS].connection.subscribe(subject, options);
-						for await (const message of subscription) {
-							const handler = message.reply ? helpers.handler(message.reply) : null;
-							let sentSubject = message.subject;
-							if (sentSubject && config.subscribe_prefix && !options.noPrefix) {
-								sentSubject = sentSubject.slice(config?.subscribe_prefix?.length ?? 0);
-							}
-							try {
-								const body = jsonCodec.decode(message.data);
-								if (!options.noAck) {
-									handler?.ack?.();
+
+					// In lazy mode without existing connection, return a proxy
+					if (config.lazy && !app[appNS].connection) {
+						let realSub = null;
+						let cancelled = false;
+						let connectionFailed = false;
+						let connectionError = null;
+
+						const proxy = {
+							unsubscribe: function(max) {
+								if (realSub) {
+									return realSub.unsubscribe(max);
 								}
-								// eslint-disable-next-line callback-return
-								callback(body, handler, sentSubject);
-							} catch (error) {
-								app.emit('nats.subscribe_message_error', {
-									subject: sentSubject,
-									error,
-								});
-								handler?.response?.(app.errorCode('nats.subscribe_message_error', error));
+								cancelled = true;
+							},
+							drain: async function() {
+								if (realSub) {
+									return realSub.drain();
+								}
+								cancelled = true;
+							},
+							get isClosed() {
+								return cancelled || connectionFailed || (realSub ? realSub.isClosed : false);
+							},
+							get error() {
+								return connectionError;
+							},
+							getSubject: function() {
+								return subject;
+							},
+							getMax: function() {
+								return options.max;
+							},
+							getReceived: function() {
+								return realSub ? realSub.getReceived() : 0;
+							},
+							getProcessed: function() {
+								return realSub ? realSub.getProcessed() : 0;
+							},
+							getPending: function() {
+								return realSub ? realSub.getPending() : 0;
+							},
+							getID: function() {
+								return realSub ? realSub.getID() : 0;
+							},
+						};
+
+						// Start connection and subscription asynchronously
+						ensureConnected().then(() => {
+							if (cancelled) {
+								return;
 							}
-						}
-					})().then().catch((err) => {
-						const error = app.errorCode('nats.subscribe_message_error', err);
-						app.emit('nats.subscribe_message_error', error);
-						throw error;
-					});
-					return subscription;
+							realSub = doSubscribe(subject, options, callback);
+						}).catch((err) => {
+							connectionFailed = true;
+							connectionError = err;
+							app.emit('nats.subscribe_connection_error', {
+								subject: subject,
+								error: err,
+							});
+							app.emit('nats.error', err);
+							app.error('[NATS] Lazy connect failed during subscribe').debug(err);
+						});
+
+						return proxy;
+					}
+
+					return doSubscribe(subject, options, callback);
 				},
 			};
 			app[appNS].message = app[appNS].publish;
 			app[appNS].handle = app[appNS].subscribe;
 
-			app[appNS].connection = await nats.connect(config.connection);
-			app.once('app.close', async () => {
-				await app[appNS].connection.drain();
-			});
+			// Register the plugin immediately (API is available)
 			app.emit('app.register', 'nats');
-			app.emit('nats.connected');
+
+			// In lazy mode, skip immediate connection
+			if (config.lazy) {
+				// Close handler is registered in doConnect() when connection is established
+				init = true;
+				initCallback();
+				return;
+			}
+
+			// Eager mode: connect immediately (existing behavior)
+			await doConnect();
 			init = true;
 			initCallback();
-			(async () => {
-				for await (const status of app[appNS].connection.status()) {
-					if (status.type === 'reconnecting') {
-						app.emit('nats.reconnecting');
-						app.warn('[NATS] Lost connection from server. Reconnecting...');
-					} else if (status.type === 'reconnect') {
-						app.emit('nats.reconnected');
-						app.log('[NATS] Reconnected to server.');
-					} else if (status.type === 'error') {
-						app.emit('nats.error', status.data);
-						app.error('[NATS] Error was triggered').debug(app[appNS].connection.protocol.lastError);
-					}
-				}
-			})().then();
-			await app[appNS].connection.closed();
-			app.warn('[NATS] Closed connection to server.');
-			app.emit('nats.close');
-			app.emit('app.deregister', 'nats');
 		})().then().catch((err) => {
 			if (!init) {
 				init = true;
