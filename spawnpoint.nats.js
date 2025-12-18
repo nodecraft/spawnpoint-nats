@@ -69,16 +69,44 @@ module.exports = require('spawnpoint').registerPlugin({
 			// Shared state for lazy connection
 			let connectPromise = null;
 
+			// Register close handler at initialization - this ensures we always handle
+			// app.close even if no connection was ever made (fixes lazy mode shutdown bug)
+			app.once('app.close', async () => {
+				// Wait for any pending connection to complete first (handles race condition
+				// where shutdown happens while connection is being established)
+				if (connectPromise) {
+					try {
+						await connectPromise;
+					} catch {
+						// Connection failed during shutdown - nothing to drain
+						// Emit deregister since the closed() handler won't be set up
+						app.emit('app.deregister', 'nats');
+						return;
+					}
+				}
+
+				// If no connection was ever made (lazy mode with no NATS operations),
+				// just deregister - there's nothing to drain
+				if (!app[appNS].connection) {
+					app.emit('app.deregister', 'nats');
+					return;
+				}
+
+				// Drain the connection gracefully
+				// The closed() handler will emit 'app.deregister' after drain completes
+				try {
+					await app[appNS].connection.drain();
+				} catch (drainError) {
+					// drain() can fail if connection is already closed or in a bad state
+					// Log the error but don't throw - the closed() handler should still
+					// fire and emit deregister, or if not, spawnpoint's timeout will kick in
+					app.error('[NATS] Error draining connection during shutdown').debug(drainError);
+				}
+			});
+
 			// Helper to perform the actual connection
 			async function doConnect() {
 				app[appNS].connection = await nats.connect(config.connection);
-
-				// Setup close handler
-				app.once('app.close', async () => {
-					if (app[appNS].connection) {
-						await app[appNS].connection.drain();
-					}
-				});
 
 				app.emit('nats.connected');
 
@@ -462,8 +490,9 @@ module.exports = require('spawnpoint').registerPlugin({
 			app.emit('app.register', 'nats');
 
 			// In lazy mode, skip immediate connection
+			// Note: Close handler is already registered above, so shutdown will work
+			// even if no NATS operations ever trigger a connection
 			if (config.lazy) {
-				// Close handler is registered in doConnect() when connection is established
 				init = true;
 				initCallback();
 				return;
