@@ -93,15 +93,15 @@ module.exports = require('spawnpoint').registerPlugin({
 				}
 
 				// Drain the connection gracefully
-				// The closed() handler will emit 'app.deregister' after drain completes
 				try {
 					await app[appNS].connection.drain();
 				} catch (drainError) {
 					// drain() can fail if connection is already closed or in a bad state
-					// Log the error but don't throw - the closed() handler should still
-					// fire and emit deregister, or if not, spawnpoint's timeout will kick in
 					app.error('[NATS] Error draining connection during shutdown').debug(drainError);
 				}
+
+				// Emit deregister directly after drain completes (or fails)
+				app.emit('app.deregister', 'nats');
 			});
 
 			// Helper to perform the actual connection
