@@ -277,6 +277,11 @@ module.exports = require('spawnpoint').registerPlugin({
 						request.events.emit('response', app.failCode('nats.timeout'));
 					}, manyOptions.maxWait);
 					request.asyncIterator = await app[appNS].connection.requestMany(subject, jsonCodec.encode(msg), manyOptions);
+					// the request timeout can fire while requestMany is still resolving; stop the late iterator or its inbox subscription lives for maxWait
+					if (request.completed) {
+						request.asyncIterator.stop();
+						return;
+					}
 					for await (const req of request.asyncIterator) {
 						const response = jsonCodec.decode(req.data);
 						switch (response.type) {
@@ -345,6 +350,7 @@ module.exports = require('spawnpoint').registerPlugin({
 						maxWaitTimeout: null,
 					};
 					request.events.once('response', function(err, response) {
+						request.completed = true;
 						if (request.timeout) {
 							clearTimeout(request.timeout);
 						}
