@@ -5,7 +5,8 @@ const path = require('node:path');
 
 const eventemitter2 = require('eventemitter2');
 const _ = require('lodash');
-const nats = require('nats');
+// Deferred so lazy mode doesn't pay to load the client until it actually connects.
+let nats;
 
 const EventEmitter2 = eventemitter2.EventEmitter2;
 
@@ -15,7 +16,7 @@ module.exports = require('spawnpoint').registerPlugin({
 	namespace: 'nats',
 	callback: true,
 	exports: function(app, initCallback) {
-		const jsonCodec = nats.JSONCodec();
+		let jsonCodec;
 		let init = false;
 		(async () => {
 			const config = app.config[this.namespace];
@@ -55,14 +56,13 @@ module.exports = require('spawnpoint').registerPlugin({
 				config.connection.name += ` node@${process.version}`;
 			}
 
-			// Setup an authenticator if available
+			// Read credentials now, but defer client-dependent parsing until connection.
+			let authCreds;
 			if (config.connection.auth) {
 				// We want to read in the creds file given to us
 				const authCredsFile = path.join(app.cwd, config.connection.auth.creds_file);
 				delete config.connection.auth.creds_file;
-				const authCreds = fs.readFileSync(authCredsFile);
-				// Create a new credsAuthenticator
-				config.connection.authenticator = nats.credsAuthenticator(authCreds);
+				authCreds = fs.readFileSync(authCredsFile);
 				delete config.connection.auth;
 			}
 
@@ -106,6 +106,12 @@ module.exports = require('spawnpoint').registerPlugin({
 
 			// Helper to perform the actual connection
 			async function doConnect() {
+				nats ??= require('nats');
+				jsonCodec ??= nats.JSONCodec();
+				if (authCreds) {
+					config.connection.authenticator = nats.credsAuthenticator(authCreds);
+					authCreds = null;
+				}
 				app[appNS].connection = await nats.connect(config.connection);
 
 				app.emit('nats.connected');
@@ -158,9 +164,9 @@ module.exports = require('spawnpoint').registerPlugin({
 
 			const helpers = {
 				wrapMessageError(error) {
-					if (error?.code === nats.ErrorCode.NoResponders) {
+					if (nats && error?.code === nats.ErrorCode.NoResponders) {
 						return app.errorCode('nats.no_responders');
-					} else if (error?.code === nats.ErrorCode.Timeout) {
+					} else if (nats && error?.code === nats.ErrorCode.Timeout) {
 						return app.errorCode('nats.timeout');
 					}
 					return app.errorCode('nats.publish_message_error', error);
