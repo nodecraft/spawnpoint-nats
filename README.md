@@ -8,10 +8,11 @@
 
 ## Installation
 Make sure to install NATS and the plugin for Spawnpoint NATS separately. NATS is treated as a peer dependency so you can change version separately.
-```npm i nats spawnpoint-nats```
+```npm i @nats-io/transport-node spawnpoint-nats```
 
 ## NATS Versions
-- This module's version `2.x.x` is designed for a NATS server running `2.x`
+- This module's version `3.x.x` uses the `@nats-io/transport-node` client (`^3.2.0`) and is designed for a NATS server running `2.x`. Requires Node.js 18+.
+- This module's version `2.x.x` uses the legacy `nats` client (now deprecated) and is designed for a NATS server running `2.x`
 - This module's version `1.x.x` is designed for a NATS server running `1.x`
 
 ## API

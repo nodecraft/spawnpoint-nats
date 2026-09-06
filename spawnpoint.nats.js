@@ -16,7 +16,6 @@ module.exports = require('spawnpoint').registerPlugin({
 	namespace: 'nats',
 	callback: true,
 	exports: function(app, initCallback) {
-		let jsonCodec;
 		let init = false;
 		(async () => {
 			const config = app.config[this.namespace];
@@ -106,8 +105,7 @@ module.exports = require('spawnpoint').registerPlugin({
 
 			// Helper to perform the actual connection
 			async function doConnect() {
-				nats ??= require('nats');
-				jsonCodec ??= nats.JSONCodec();
+				nats ??= require('@nats-io/transport-node');
 				if (authCreds) {
 					config.connection.authenticator = nats.credsAuthenticator(authCreds);
 					authCreds = null;
@@ -126,8 +124,8 @@ module.exports = require('spawnpoint').registerPlugin({
 							app.emit('nats.reconnected');
 							app.log('[NATS] Reconnected to server.');
 						} else if (status.type === 'error') {
-							app.emit('nats.error', status.data);
-							app.error('[NATS] Error was triggered').debug(app[appNS].connection.protocol.lastError);
+							app.emit('nats.error', status.error);
+							app.error('[NATS] Error was triggered').debug(status.error);
 						}
 					}
 				})().then();
@@ -164,9 +162,11 @@ module.exports = require('spawnpoint').registerPlugin({
 
 			const helpers = {
 				wrapMessageError(error) {
-					if (nats && error?.code === nats.ErrorCode.NoResponders) {
+					// The client reports these either directly or wrapped in a RequestError, depending on the code path.
+					const cause = error instanceof nats.RequestError && error.cause ? error.cause : error;
+					if (cause instanceof nats.NoRespondersError) {
 						return app.errorCode('nats.no_responders');
-					} else if (nats && error?.code === nats.ErrorCode.Timeout) {
+					} else if (cause instanceof nats.TimeoutError) {
 						return app.errorCode('nats.timeout');
 					}
 					return app.errorCode('nats.publish_message_error', error);
@@ -186,7 +186,7 @@ module.exports = require('spawnpoint').registerPlugin({
 					const handler = new EventEmitter2();
 					handler.once('response', function(err, results) {
 						handler.removeAllListeners();
-						return app[appNS].connection.publish(replyTo, jsonCodec.encode({
+						return app[appNS].connection.publish(replyTo, JSON.stringify({
 							type: 'response',
 							results: results || null,
 							error: err || null,
@@ -196,13 +196,13 @@ module.exports = require('spawnpoint').registerPlugin({
 						if (Number.isNaN(Number(timeout)) || timeout < 1) {
 							timeout = null;
 						}
-						return app[appNS].connection.publish(replyTo, jsonCodec.encode({
+						return app[appNS].connection.publish(replyTo, JSON.stringify({
 							type: 'ack',
 							timeout: timeout,
 						}));
 					});
 					handler.on('update', function(results) {
-						return app[appNS].connection.publish(replyTo, jsonCodec.encode({
+						return app[appNS].connection.publish(replyTo, JSON.stringify({
 							type: 'update',
 							results: results,
 						}));
@@ -224,7 +224,7 @@ module.exports = require('spawnpoint').registerPlugin({
 			// Internal implementation of publish (assumes connection exists)
 			function doPublish(subject, msg, options, callback) {
 				try {
-					app[appNS].connection.publish(subject, jsonCodec.encode(msg), options);
+					app[appNS].connection.publish(subject, JSON.stringify(msg), options);
 					return callback(); // assume it was sent?
 				} catch (err) {
 					return callback(helpers.wrapMessageError(err));
@@ -242,7 +242,7 @@ module.exports = require('spawnpoint').registerPlugin({
 							sentSubject = sentSubject.slice(config?.subscribe_prefix?.length ?? 0);
 						}
 						try {
-							const body = jsonCodec.decode(message.data);
+							const body = message.json();
 							if (!options.noAck) {
 								handler?.ack?.();
 							}
@@ -282,14 +282,14 @@ module.exports = require('spawnpoint').registerPlugin({
 						request.events.emit('timeout');
 						request.events.emit('response', app.failCode('nats.timeout'));
 					}, manyOptions.maxWait);
-					request.asyncIterator = await app[appNS].connection.requestMany(subject, jsonCodec.encode(msg), manyOptions);
+					request.asyncIterator = await app[appNS].connection.requestMany(subject, JSON.stringify(msg), manyOptions);
 					// the request timeout can fire while requestMany is still resolving; stop the late iterator or its inbox subscription lives for maxWait
 					if (request.completed) {
 						request.asyncIterator.stop();
 						return;
 					}
 					for await (const req of request.asyncIterator) {
-						const response = jsonCodec.decode(req.data);
+						const response = req.json();
 						switch (response.type) {
 							case 'ack': {
 								if (request.timeout) {
@@ -446,8 +446,8 @@ module.exports = require('spawnpoint').registerPlugin({
 								}
 								cancelled = true;
 							},
-							get isClosed() {
-								return cancelled || connectionFailed || (realSub ? realSub.isClosed : false);
+							isClosed: function() {
+								return cancelled || connectionFailed || (realSub ? realSub.isClosed() : false);
 							},
 							get error() {
 								return connectionError;
