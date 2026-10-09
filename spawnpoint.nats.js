@@ -71,12 +71,16 @@ module.exports = require('spawnpoint').registerPlugin({
 			// Lazy subscriptions waiting on a connection; doConnect attaches them so any successful connect brings them up.
 			const pendingSubscriptions = new Set();
 			let subscribeRetryTimer = null;
+			let subscribeRetryDelay = 0;
 
 			// Register close handler at initialization - this ensures we always handle
 			// app.close even if no connection was ever made (fixes lazy mode shutdown bug)
 			app.once('app.close', async () => {
 				closing = true;
 				clearTimeout(subscribeRetryTimer);
+				for (const pending of pendingSubscriptions) {
+					pending.cancel();
+				}
 				pendingSubscriptions.clear();
 
 				// Wait for any pending connection to complete first (handles race condition
@@ -120,14 +124,10 @@ module.exports = require('spawnpoint').registerPlugin({
 				}
 				app[appNS].connection = await nats.connect(config.connection);
 				for (const pending of pendingSubscriptions) {
-					try {
-						pending.attach();
-					} catch (err) {
-						app.emit('nats.error', err);
-						app.error('[NATS] Failed to attach lazy subscription').debug(err);
-					}
+					pending.attach();
 				}
 				pendingSubscriptions.clear();
+				subscribeRetryDelay = 0;
 
 				app.emit('nats.connected');
 
@@ -182,13 +182,20 @@ module.exports = require('spawnpoint').registerPlugin({
 				if (closing || subscribeRetryTimer || pendingSubscriptions.size === 0) {
 					return;
 				}
+				// Back off so an unreachable server isn't hammered, including when reconnectTimeWait is 0.
+				const baseDelay = Math.max(config.connection.reconnectTimeWait ?? 2000, 1000);
+				const maxDelay = Math.max(baseDelay, 30000);
+				subscribeRetryDelay = Math.min(subscribeRetryDelay ? subscribeRetryDelay * 2 : baseDelay, maxDelay);
 				subscribeRetryTimer = setTimeout(() => {
 					subscribeRetryTimer = null;
 					ensureConnected().catch((err) => {
+						for (const pending of pendingSubscriptions) {
+							pending.fail(err);
+						}
 						app.warn(`[NATS] Lazy connect retry failed, ${pendingSubscriptions.size} subscription(s) still pending`).debug(err);
 						scheduleSubscribeRetry();
 					});
-				}, config.connection.reconnectTimeWait ?? 2000);
+				}, subscribeRetryDelay);
 			}
 
 			const helpers = {
@@ -464,8 +471,25 @@ module.exports = require('spawnpoint').registerPlugin({
 						let connectionError = null;
 						const pending = {
 							attach: function() {
-								connectionError = null;
-								realSub = doSubscribe(subject, options, callback);
+								try {
+									realSub = doSubscribe(subject, options, callback);
+									connectionError = null;
+								} catch (err) {
+									cancelled = true;
+									connectionError = err;
+									app.emit('nats.subscribe_connection_error', {
+										subject: subject,
+										error: err,
+									});
+									app.emit('nats.error', err);
+									app.error('[NATS] Failed to attach lazy subscription').debug(err);
+								}
+							},
+							fail: function(err) {
+								connectionError = err;
+							},
+							cancel: function() {
+								cancelled = true;
 							},
 						};
 						pendingSubscriptions.add(pending);
