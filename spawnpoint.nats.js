@@ -67,10 +67,18 @@ module.exports = require('spawnpoint').registerPlugin({
 
 			// Shared state for lazy connection
 			let connectPromise = null;
+			let closing = false;
+			// Lazy subscriptions waiting on a connection; doConnect attaches them so any successful connect brings them up.
+			const pendingSubscriptions = new Set();
+			let subscribeRetryTimer = null;
 
 			// Register close handler at initialization - this ensures we always handle
 			// app.close even if no connection was ever made (fixes lazy mode shutdown bug)
 			app.once('app.close', async () => {
+				closing = true;
+				clearTimeout(subscribeRetryTimer);
+				pendingSubscriptions.clear();
+
 				// Wait for any pending connection to complete first (handles race condition
 				// where shutdown happens while connection is being established)
 				if (connectPromise) {
@@ -111,6 +119,15 @@ module.exports = require('spawnpoint').registerPlugin({
 					authCreds = null;
 				}
 				app[appNS].connection = await nats.connect(config.connection);
+				for (const pending of pendingSubscriptions) {
+					try {
+						pending.attach();
+					} catch (err) {
+						app.emit('nats.error', err);
+						app.error('[NATS] Failed to attach lazy subscription').debug(err);
+					}
+				}
+				pendingSubscriptions.clear();
 
 				app.emit('nats.connected');
 
@@ -158,6 +175,20 @@ module.exports = require('spawnpoint').registerPlugin({
 					connectPromise = null; // Allow retry on failure
 					throw err;
 				}
+			}
+
+			// Without a retry, subscriptions from a failed lazy connect never attach and the process keeps running with no responders.
+			function scheduleSubscribeRetry() {
+				if (closing || subscribeRetryTimer || pendingSubscriptions.size === 0) {
+					return;
+				}
+				subscribeRetryTimer = setTimeout(() => {
+					subscribeRetryTimer = null;
+					ensureConnected().catch((err) => {
+						app.warn(`[NATS] Lazy connect retry failed, ${pendingSubscriptions.size} subscription(s) still pending`).debug(err);
+						scheduleSubscribeRetry();
+					});
+				}, config.connection.reconnectTimeWait ?? 2000);
 			}
 
 			const helpers = {
@@ -430,8 +461,14 @@ module.exports = require('spawnpoint').registerPlugin({
 					if (config.lazy && !app[appNS].connection) {
 						let realSub = null;
 						let cancelled = false;
-						let connectionFailed = false;
 						let connectionError = null;
+						const pending = {
+							attach: function() {
+								connectionError = null;
+								realSub = doSubscribe(subject, options, callback);
+							},
+						};
+						pendingSubscriptions.add(pending);
 
 						const proxy = {
 							unsubscribe: function(max) {
@@ -439,15 +476,17 @@ module.exports = require('spawnpoint').registerPlugin({
 									return realSub.unsubscribe(max);
 								}
 								cancelled = true;
+								pendingSubscriptions.delete(pending);
 							},
 							drain: async function() {
 								if (realSub) {
 									return realSub.drain();
 								}
 								cancelled = true;
+								pendingSubscriptions.delete(pending);
 							},
 							isClosed: function() {
-								return cancelled || connectionFailed || (realSub ? realSub.isClosed() : false);
+								return cancelled || (realSub ? realSub.isClosed() : false);
 							},
 							get error() {
 								return connectionError;
@@ -472,21 +511,18 @@ module.exports = require('spawnpoint').registerPlugin({
 							},
 						};
 
-						// Start connection and subscription asynchronously
-						ensureConnected().then(() => {
+						ensureConnected().catch((err) => {
 							if (cancelled) {
 								return;
 							}
-							realSub = doSubscribe(subject, options, callback);
-						}).catch((err) => {
-							connectionFailed = true;
 							connectionError = err;
 							app.emit('nats.subscribe_connection_error', {
 								subject: subject,
 								error: err,
 							});
 							app.emit('nats.error', err);
-							app.error('[NATS] Lazy connect failed during subscribe').debug(err);
+							app.error('[NATS] Lazy connect failed during subscribe, retrying').debug(err);
+							scheduleSubscribeRetry();
 						});
 
 						return proxy;
